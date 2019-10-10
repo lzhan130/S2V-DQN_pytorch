@@ -14,39 +14,44 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 
-from torch_geometric.nn import MessagePassing
-from torch_geometric.utils import scatter_
-
+from torch_scatter import scatter_add
 from functools import partial
 
-# Implement Structure2Vec using pytorch geometric
-class S2V(MessagePassing):
+class S2V(nn.Module):
     def __init__(self, in_dim, out_dim):
-        super(S2V, self).__init__(aggr="add")
+        super(S2V, self).__init__()
+        self.in_dim = in_dim
+        self.out_dim = out_dim
         Linear = partial(nn.Linear, bias=False)
         self.lin1 = Linear(1, out_dim)
         self.lin2 = Linear(in_dim, out_dim)
-        self.lin3 = Linear(in_dim, out_dim)
+        self.lin3 = Linear(out_dim, out_dim)
         self.lin4 = Linear(1, out_dim)
 
-    def forward(self, x, x_tag, edge_index, edge_attr):
-        # x has shape [N, in_dim]
-        # x_tag has shape [N, 1]
-        # edge_index has shape [E, 2]
-        # edge_attr has shape [E, 1]
-        x_tag = x_tag.unsqueeze(-1)
-        x_tag = self.lin1(x_tag)
-        edge_attr = F.relu(self.lin4(edge_attr))
-        return self.propagate(edge_index=edge_index, x=x, x_tag=x_tag, edge_attr=edge_attr)
+    def forward(self, mu, x, edge_index, edge_w):
+        # mu has shape [batch_size, N, in_dim]
+        # x has shape [batch_size, N, 1]
+        # edge_index has shape [batch_size, E, 2]
+        # edge_w has shape [batch_size, E, 1]
+        batch_size, N, in_dim = mu.shape
+        
+        #first part of eq. 3
+        x = self.lin1(x)        
 
-    def message(self, x_j):
-        return x_j
+        # second part of eq. 3
+        mu_j =  [mu[b, edge_index[b][:, 1], :] for b in range(batch_size)]
+        ## |_ [batch_size, N, in_dim]
+        mu_aggr = torch.stack([scatter_add(mu_j[b], edge_index[b][:, 1], dim=0, out=mu_j[b].new_zeros(N, self.in_dim)) for b in range(batch_size)])
+        mu_aggr = self.lin2(mu_aggr) 
 
-    def update(self, aggr_out, x_tag, edge_attr, x, edge_index):
-        p1 = x_tag
-        p2 = self.lin2(aggr_out)
-        p3 = scatter_("add", edge_attr, edge_index[0], dim_size=x.shape[0])
-        return F.relu(p1+p2+p3)
+        # third part of eq.3
+        edge_w = [F.relu(self.lin4(item)) for item in edge_w] 
+        ## |_ [batch_size, E, out_dim]
+        edge_w_aggr = torch.stack([scatter_add(edge_w[b], edge_index[b][:, 1], dim=0,  out=edge_w[b].new_zeros(N, self.out_dim)) for b in range(batch_size)])
+        ## |_[batch_size, N, out_dim]
+        edge_w_aggr = self.lin3(edge_w_aggr)
+
+        return F.relu(x + mu_aggr + edge_w_aggr) 
 
 # Q function
 class Q_Fun(nn.Module):
@@ -56,31 +61,30 @@ class Q_Fun(nn.Module):
         self.lin5 = Linear(2*hid_dim, 1)
         self.lin6 = Linear(hid_dim, hid_dim)
         self.lin7 = Linear(hid_dim, hid_dim)
-        self.S2Vs = [S2V(in_dim=in_dim, out_dim=hid_dim)]
         self.T    = T
-        for i in range(T-1):
+        self.S2Vs = nn.ModuleList([S2V(in_dim=in_dim, out_dim=hid_dim)])
+        for i in range(self.T - 1):
             self.S2Vs.append(S2V(hid_dim, hid_dim))
 
+        self.loss = nn.MSELoss
         self.optimizer = optim.Adam(self.parameters(), lr=ALPHA)
 
-        self.device = torch.device("cpu" if torch.cuda.is_available() 
+        self.device = torch.device("cuda:1" if torch.cuda.is_available() 
                                    else "cpu")
         self.to(self.device)
 
-    def forward(self, x, edge_index, edge_attr, x_tag):
-        # x has shape [N, in_dim]
-        # x_tag has shape [N, 1] bool value
-        # edge_index has shape [E, 2]
-        # edge_attr has shape [E, 1]
+    def forward(self, mu, x, edge_index, edge_w):
+        # mu has shape [batch_size, N, in_dim]
+        # x has shape [batch_size, N, 1]
+        # edge_index has shape [batch_size, E, 2]
+        # edge_w has shape [batch_size, E, 1]
 
-        print(x_tag.shape)
         for i in range(self.T):
-            x = self.S2Vs[i](x, x_tag, edge_index, edge_attr)
+            mu = self.S2Vs[i](mu, x, edge_index, edge_w)
 
-        graph_pool = self.lin6(torch.sum(x, dim=0, keepdim=True))
-        nodes_vec = self.lin7(x)
-        Cat = torch.cat((graph_pool.repeat(nodes_vec.shape[0], 1), nodes_vec), 
-                        dim=1)
-        Q   = self.lin5(F.relu(Cat)) # has shape [N, 1]
+        graph_pool = self.lin6(torch.sum(mu, dim=1, keepdim=True))
+        nodes_vec = self.lin7(mu)
+        Cat = torch.cat((graph_pool.repeat(1, nodes_vec.shape[1], 1), nodes_vec), 
+                        dim=2)
+        return self.lin5(F.relu(Cat)).squeeze() #[batch_size, N]
 
-        return Q
