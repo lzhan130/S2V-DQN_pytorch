@@ -29,26 +29,17 @@ class S2V(nn.Module):
         self.lin4 = Linear(1, out_dim)
 
     def forward(self, mu, x, edge_index, edge_w):
-        # mu has shape [batch_size, N, in_dim]
-        # x has shape [batch_size, N, 1]
-        # edge_index has shape [batch_size, E, 2]
-        # edge_w has shape [batch_size, E, 1]
-        batch_size, N, in_dim = mu.shape
-        
         #first part of eq. 3
         x = self.lin1(x)        
 
         # second part of eq. 3
-        mu_j =  [mu[b, edge_index[b][:, 1], :] for b in range(batch_size)]
-        ## |_ [batch_size, N, in_dim]
-        mu_aggr = torch.stack([scatter_add(mu_j[b], edge_index[b][:, 1], dim=0, out=mu_j[b].new_zeros(N, self.in_dim)) for b in range(batch_size)])
+        mu_j = mu[edge_index[1, :], :]
+        mu_aggr = scatter_add(mu_j, edge_index[1, :], dim=0)
         mu_aggr = self.lin2(mu_aggr) 
 
         # third part of eq.3
-        edge_w = [F.relu(self.lin4(item)) for item in edge_w] 
-        ## |_ [batch_size, E, out_dim]
-        edge_w_aggr = torch.stack([scatter_add(edge_w[b], edge_index[b][:, 1], dim=0,  out=edge_w[b].new_zeros(N, self.out_dim)) for b in range(batch_size)])
-        ## |_[batch_size, N, out_dim]
+        edge_w = F.relu(self.lin4(edge_w))
+        edge_w_aggr = scatter_add(edge_w, edge_index[1, :], dim=0)
         edge_w_aggr = self.lin3(edge_w_aggr)
 
         return F.relu(x + mu_aggr + edge_w_aggr) 
@@ -57,6 +48,8 @@ class S2V(nn.Module):
 class Q_Fun(nn.Module):
     def __init__(self, in_dim, hid_dim, T, ALPHA):
         super(Q_Fun, self).__init__()
+        self.in_dim = in_dim
+        self.hid_dim = hid_dim
         Linear = partial(nn.Linear, bias=False)
         self.lin5 = Linear(2*hid_dim, 1)
         self.lin6 = Linear(hid_dim, hid_dim)
@@ -73,18 +66,24 @@ class Q_Fun(nn.Module):
                                    else "cpu")
         self.to(self.device)
 
-    def forward(self, mu, x, edge_index, edge_w):
-        # mu has shape [batch_size, N, in_dim]
-        # x has shape [batch_size, N, 1]
-        # edge_index has shape [batch_size, E, 2]
-        # edge_w has shape [batch_size, E, 1]
+    def forward(self, mu, x, edge_index, edge_w, *args):
+        # mu has shape [batch_size*N, in_dim]
+        # x has shape [batch_size*N, 1]
+        # edge_index has shape [Es, 2]
+        # edge_w has shape [Es, 1]
 
         for i in range(self.T):
             mu = self.S2Vs[i](mu, x, edge_index, edge_w)
-
-        graph_pool = self.lin6(torch.sum(mu, dim=1, keepdim=True))
+        
         nodes_vec = self.lin7(mu)
-        Cat = torch.cat((graph_pool.repeat(1, nodes_vec.shape[1], 1), nodes_vec), 
-                        dim=2)
-        return self.lin5(F.relu(Cat)).squeeze() #[batch_size, N]
+        if not args==():
+            batch_index, num_nodes, batch_size = args
+            graph_pool = scatter_add(mu, batch_index, dim=0)
+            graph_pool = graph_pool.repeat(1, num_nodes).view(-1, self.hid_dim)
+        else:
+            graph_pool = torch.sum(mu, dim=0, keepdim=True)
+            num_nodes = mu.shape[0]
+            graph_pool = graph_pool.repeat(num_nodes,1)
+        Cat = torch.cat((graph_pool, nodes_vec), dim=1)
+        return self.lin5(F.relu(Cat)).squeeze()
 

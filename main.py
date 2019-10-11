@@ -13,32 +13,33 @@ if __name__ == "__main__":
     
     for i in range(num_eposides):
         score = 0
-        edge_index, edge_w, state, done = env.reset()
+        mu, edge_index, edge_w, state, done = env.reset()
 
         state_steps = [state]
         reward_steps = []
         action_steps = []
         steps_cntr = 0
 
-        while not done:
-            action = agent.choose_action(edge_index, edge_w, state)
-            _, _, state, reward, new_state, done = env.step(action)
+        while not done[0]:
+            action = agent.choose_action(mu, edge_index, edge_w, state)
+            _, _, _, reward, new_state, done = env.step(action)
             score += reward
 
-            state_steps.append(state)
+            state_steps.append(new_state)
             reward_steps.append(reward)
             action_steps.append(action)
             steps_cntr += 1
             
-            if steps_cntr > n_step:
-                agent.remember(edge_index,
+            if steps_cntr > n_step+1:
+                agent.remember(mu,
+                               edge_index,
                                edge_w,
                                state = state_steps[-(n_step+1)], 
                                action = action_steps[-n_step], 
-                               reward_sum = sum(reward_steps[-n_step:]), 
+                               reward_sum = [sum(reward_steps[-n_step:])], 
                                new_state = state_steps[-1], 
                                done = done)
-            agent.learn()
+                agent.learn()
             state = new_state
 
         scores.append(score)
