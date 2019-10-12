@@ -5,7 +5,7 @@ import numpy as np
 
 if __name__ == "__main__":
     env = env(graph_size=50) 
-    num_eposides = 1000
+    num_eposides = 100000
     n_step = 5
     agent = Agent(num_nodes=env.graph_size)
 
@@ -34,19 +34,22 @@ if __name__ == "__main__":
                 agent.remember(mu,
                                edge_index,
                                edge_w,
-                               state = state_steps[-(n_step+1)], 
-                               action = action_steps[-n_step], 
-                               reward_sum = [sum(reward_steps[-n_step:])], 
-                               new_state = state_steps[-1], 
-                               done = done)
+                               state_steps[-(n_step+1)], 
+                               action_steps[-n_step], 
+                               [sum(reward_steps[-n_step:])], 
+                               state_steps[-1], 
+                               done)
                 agent.learn()
             state = new_state
 
         scores.append(score)
         avg_score = np.mean(scores[-10:])
 
-        print("Episode: {}, score: {}, avg_score: {}".
+        print("Episode: {:<4}, score: {:<4}, avg_score: {:.2f}".
                 format(i, score, avg_score))
+        if i%10 == 0:
+            print("... Saving scores ...")
+            np.save("scores_log.npy", scores)
 
 
 

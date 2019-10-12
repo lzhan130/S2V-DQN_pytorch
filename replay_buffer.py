@@ -11,7 +11,7 @@ class ReplayBuffer:
         self.mem_cntr = 0
         self.graph_memory = [None] * self.mem_size
 
-    def store_transition(self, mu, edge_index, edge_w, state, action, reward, state_, done):
+    def store_transition(self,  mu, edge_index, edge_w, state, action, reward, state_, done):
         graph = Data(edge_index=torch.tensor(edge_index))
         graph.x_attr = torch.tensor(mu)
         graph.edge_w = torch.tensor(edge_w)

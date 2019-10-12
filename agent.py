@@ -46,9 +46,8 @@ class Agent(object):
             action = torch.argmax(Q).item()
         return [int(action)]
     
-    def remember(self, mu, edge_index, edge_w, state, action, reward_sum, new_state, done):
-        self.memory.store_transition(mu, edge_index, edge_w, state, action, reward_sum, 
-                                     new_state, done)
+    def remember(self, *args):
+        self.memory.store_transition(*args)
 
     def learn(self):
         if self.memory.mem_cntr < self.batch_size:
@@ -56,7 +55,7 @@ class Agent(object):
         graph_batch = self.memory.sample_buffer(self.batch_size)
         graph_batch.to(self.Q.device)
 
-        for i in range(10):
+        for i in range(1):
             self.Q.optimizer.zero_grad()
             
             mu = graph_batch.x_attr
