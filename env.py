@@ -21,28 +21,35 @@ class env():
     def reset(self):
         self.edge_index, self.edge_w = self._BA(self.graph_size) 
         self.node_tag = np.zeros((self.graph_size, 1), dtype=np.float32)
-        self.done = self._done()
-        self.cost = - self.node_tag.sum()
-        self.mu = np.zeros((self.graph_size, 3), dtype=np.float32)
+        self.done     = self._done()
+        self.cover    = self._cover()
+        self.mu       = np.zeros((self.graph_size, 3), dtype=np.float32)
 
         return self.mu, self.edge_index, self.edge_w, self.node_tag, self.done
 
     def step(self, action):
         assert action[0] in range(self.graph_size)
         self.node_tag[action[0]] = 1
-        new_cost = - self.node_tag.sum()
-        reward = new_cost - self.cost
-        self.cost = new_cost
+        new_cover = self._cover()
+        reward    = (new_cover - self.cover)/self.edge_index.shape[1]
+        self.cover = new_cover
         self.done = self._done()
 
         return self.mu, self.edge_index, self.edge_w, reward, self.node_tag, self.done
 
     def _BA(self, size):
-        G = nx.random_graphs.barabasi_albert_graph(n=size, m=3)
+        G          = nx.random_graphs.barabasi_albert_graph(n=size, m=3)
         edge_index = np.array(G.edges(), dtype=np.long).T
         edge_w     = np.ones((G.number_of_edges(), 1), dtype=np.float32)
         return edge_index, edge_w
 
+    def _cover(self):
+        # count the number of edges covered by nodes_tag
+        edge_end0 = np.array([1 if self.node_tag[node] == 1 else 0 for node in self.edge_index[0]])
+        edge_end1 = np.array([1 if self.node_tag[node] == 1 else 0 for node in self.edge_index[1]])
+
+        return len(np.nonzero(edge_end0 + edge_end1)[0])
+        
     def _done(self):
         # check if all nodes are covered
         half_remain_edges = [False if self.node_tag[node] == 1 else True for node in self.edge_index[0]]

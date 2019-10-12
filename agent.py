@@ -58,16 +58,17 @@ class Agent(object):
         for i in range(1):
             self.Q.optimizer.zero_grad()
             
-            mu = graph_batch.x_attr
-            state = graph_batch.state
-            new_state = graph_batch.new_state
-            edge_index = graph_batch.edge_index
-            edge_w = graph_batch.edge_w
-            action = graph_batch.action
-            reward_sum = graph_batch.reward
+            mu          = graph_batch.x_attr
+            state       = graph_batch.state
+            new_state   = graph_batch.new_state
+            edge_index  = graph_batch.edge_index
+            edge_w      = graph_batch.edge_w
+            action      = graph_batch.action
+            reward_sum  = graph_batch.reward
             batch_index = graph_batch.batch
-            num_nodes = self.num_nodes 
-            batch_size = self.batch_size
+
+            num_nodes   = self.num_nodes 
+            batch_size  = self.batch_size
 
             y_target = reward_sum + self.gamma * self._max_Q(mu, new_state, edge_index, edge_w, batch_index, num_nodes, batch_size)
             y_pred   = self.Q(mu, state, edge_index, edge_w, batch_index, num_nodes, batch_size)[action]

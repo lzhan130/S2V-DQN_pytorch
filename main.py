@@ -23,7 +23,7 @@ if __name__ == "__main__":
         while not done[0]:
             action = agent.choose_action(mu, edge_index, edge_w, state)
             _, _, _, reward, new_state, done = env.step(action)
-            score += reward
+            score += 1
 
             state_steps.append(new_state)
             reward_steps.append(reward)
@@ -50,10 +50,4 @@ if __name__ == "__main__":
         if i%10 == 0:
             print("... Saving scores ...")
             np.save("scores_log.npy", scores)
-
-
-
-
-
-
 
