@@ -22,7 +22,8 @@ class env():
         self.edge_index, self.edge_w = self._BA(self.graph_size) 
         self.node_tag = np.zeros((self.graph_size, 1), dtype=np.float32)
         self.done     = self._done()
-        self.cover    = self._cover()
+        #self.cover    = self._cover()
+        self.cost     = -sum(self.node_tag)
         self.mu       = np.zeros((self.graph_size, 3), dtype=np.float32)
 
         return self.mu, self.edge_index, self.edge_w, self.node_tag, self.done
@@ -30,9 +31,12 @@ class env():
     def step(self, action):
         assert action[0] in range(self.graph_size)
         self.node_tag[action[0]] = 1
-        new_cover = self._cover()
-        reward    = (new_cover - self.cover)/self.edge_index.shape[1]
-        self.cover = new_cover
+        #new_cover = self._cover()
+        #reward    = float(new_cover - 1.0 - self.cover)
+        #self.cover = new_cover
+        new_cost = -sum(self.node_tag)
+        reward     = new_cost - self.cost
+        self.cost = new_cost
         self.done = self._done()
 
         return self.mu, self.edge_index, self.edge_w, reward, self.node_tag, self.done
@@ -41,6 +45,10 @@ class env():
         G          = nx.random_graphs.barabasi_albert_graph(n=size, m=3)
         edge_index = np.array(G.edges(), dtype=np.long).T
         edge_w     = np.ones((G.number_of_edges(), 1), dtype=np.float32)
+        """
+        edge_index = np.load("edge_index.npy")
+        edge_w = np.load("edge_w.npy")
+        """
         return edge_index, edge_w
 
     def _cover(self):
@@ -56,9 +64,9 @@ class env():
         remain_nodes = self.edge_index[1][half_remain_edges] 
 
         if self.node_tag[remain_nodes].sum() == len(remain_nodes):
-            done_flag = [True] 
+            done_flag = [1.0] 
         else:
-            done_flag = [False]
+            done_flag = [0.0]
         return done_flag
      
 

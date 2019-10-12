@@ -23,7 +23,6 @@ if __name__ == "__main__":
         while not done[0]:
             action = agent.choose_action(mu, edge_index, edge_w, state)
             _, _, _, reward, new_state, done = env.step(action)
-            score += 1
 
             state_steps.append(new_state)
             reward_steps.append(reward)
@@ -40,10 +39,11 @@ if __name__ == "__main__":
                                state_steps[-1], 
                                done)
                 agent.learn()
-            state = new_state
 
+            state = new_state
+        score = len(set([a[0] for a in action_steps]))
         scores.append(score)
-        avg_score = np.mean(scores[-10:])
+        avg_score = np.mean(scores[-100:])
 
         print("Episode: {:<4}, score: {:<4}, avg_score: {:.2f}".
                 format(i, score, avg_score))

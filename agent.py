@@ -39,17 +39,25 @@ class Agent(object):
         state = torch.tensor(state).to(self.Q.device)
 
         Q = self.Q(mu, state, edge_index, edge_w)
-
-        if np.random.rand() < self.epsilon:
-            action = np.random.choice(self.num_nodes, size=1)
+        # make sure select new nodes
+        if np.random.rand() > self.epsilon:
+            while True:
+                action = np.random.choice(self.num_nodes, size=1)
+                if state[int(action)] == 0:
+                    break
         else:
-            action = torch.argmax(Q).item()
+            q_value, q_action = torch.sort(Q, descending=True)
+            for action in q_action:
+                if state[action] == 0:
+                    break
+            action = action.item()
         return [int(action)]
     
     def remember(self, *args):
         self.memory.store_transition(*args)
 
     def learn(self):
+        #print("**********")
         if self.memory.mem_cntr < self.batch_size:
             return
         graph_batch = self.memory.sample_buffer(self.batch_size)
@@ -64,13 +72,14 @@ class Agent(object):
             edge_index  = graph_batch.edge_index
             edge_w      = graph_batch.edge_w
             action      = graph_batch.action
+            done        = graph_batch.done
             reward_sum  = graph_batch.reward
             batch_index = graph_batch.batch
 
             num_nodes   = self.num_nodes 
             batch_size  = self.batch_size
 
-            y_target = reward_sum + self.gamma * self._max_Q(mu, new_state, edge_index, edge_w, batch_index, num_nodes, batch_size)
+            y_target = reward_sum + self.gamma * done * self._max_Q(mu, new_state, edge_index, edge_w, batch_index, num_nodes, batch_size)
             y_pred   = self.Q(mu, state, edge_index, edge_w, batch_index, num_nodes, batch_size)[action]
 
             loss = torch.mean(torch.pow(y_target-y_pred, 2))
