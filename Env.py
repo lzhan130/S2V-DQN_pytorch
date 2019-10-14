@@ -74,9 +74,9 @@ class env():
     def _done(self):
         num_edges = self.graph.edge_index.shape[1]
         if num_edges == self.graph.cover:
-            return True
+            return 1.0
         else:
-            return False
+            return 0.0
 
     def _cover(self):
         """

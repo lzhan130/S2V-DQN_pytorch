@@ -3,6 +3,19 @@ from agent import Agent
 
 import numpy as np
 
+def Greedy(edge_index):
+    r"""Greedy for MVC"""
+    import networkx as nx
+    G = nx.from_edgelist(np.array(edge_index).T)
+    cover_set = []
+    while G.number_of_edges() > 0:
+        d = dict(G.degree())
+        sort_d = sorted(list(zip(d.keys(), d.values())), key=lambda x:x[1], reverse=True)
+        del_node = sort_d[0][0]
+        cover_set.append(del_node)
+        G.remove_node(del_node)
+    print("***** Greedy:{} *****".format(len(cover_set)))
+
 if __name__ == "__main__":
     env = env(graph_size=50) 
     num_eposides = 100000
@@ -13,7 +26,7 @@ if __name__ == "__main__":
     
     for i in range(num_eposides):
         score = 0
-        mu, edge_index, edge_w, state, done = env.reset()
+        num_nodes, mu, edge_index, edge_w, state, done = env.reset()
 
         state_steps = [state]
         reward_steps = []
@@ -30,7 +43,8 @@ if __name__ == "__main__":
             steps_cntr += 1
             
             if steps_cntr > n_step+1:
-                agent.remember(mu,
+                agent.remember(num_nodes,
+                               mu,
                                edge_index,
                                edge_w,
                                state_steps[-(n_step+1)], 
@@ -48,6 +62,14 @@ if __name__ == "__main__":
         print("Episode: {:<4}, score: {:<4}, avg_score: {:.2f}".
                 format(i, score, avg_score))
         if i%10 == 0:
-            print("... Saving scores ...")
+            # Greedy
+            Greedy(edge_index)
+            print("Saving scores ...")
             np.save("scores_log.npy", scores)
+            agent.Q.scheduler.step() 
+
+        if i%100 == 0:
+            print("Saving model ...")
+            agent.save("check_point/model_state_dict_{}".format(i))
+            
 
